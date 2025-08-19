@@ -7,10 +7,9 @@ async function startBot() {
 
     sock.ev.on("connection.update", ({ connection, qr }) => {
         if (qr) {
-            📱 Open this link in your browser to scan QR:
-https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=xxxxxx
-           
-        }
+    console.log("📱 Scan QR here:")
+    console.log(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`)
+               }
         if (connection === "open") {
             console.log("✅ Bot connected successfully!")
         }
