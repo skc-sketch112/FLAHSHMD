@@ -1,14 +1,14 @@
-const fs = require("fs")
-const path = require("path")
+const fs = require("fs");
+const path = require("path");
 
 // Load plugins
-const plugins = new Map()
+const plugins = new Map();
 fs.readdirSync(path.join(__dirname, "plugins")).forEach(file => {
     if (file.endsWith(".js")) {
-        const plugin = require(`./plugins/${file}`)
-        plugins.set(plugin.name, plugin)
+        const plugin = require(`./plugins/${file}`);
+        plugins.set(plugin.name, plugin);
     }
-})
+}); fs = requ
     { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
 const qrcode = require("qrcode-terminal")
 
