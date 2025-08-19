@@ -1,6 +1,7 @@
 # WhatsApp Bot (Baileys + Render)
 
-This is a simple WhatsApp bot using [Baileys](https://github.com/WhiskeySockets/Baileys), deployed on [Render](https://render.com).
+This is a simple WhatsApp bot using [Baileys](https://github.com/WhiskeySockets/Baileys), 
+deployed on [Render](https://render.com).
 ---
 
 ## ⚙️ Installation  
