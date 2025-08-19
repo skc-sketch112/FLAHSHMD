@@ -1,4 +1,15 @@
-const { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
+const fs = require("fs")
+const path = require("path")
+
+// Load plugins
+const plugins = new Map()
+fs.readdirSync(path.join(__dirname, "plugins")).forEach(file => {
+    if (file.endsWith(".js")) {
+        const plugin = require(`./plugins/${file}`)
+        plugins.set(plugin.name, plugin)
+    }
+})
+    { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
 const qrcode = require("qrcode-terminal")
 
 async function startBot() {
