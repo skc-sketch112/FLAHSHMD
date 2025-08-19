@@ -5,16 +5,9 @@ This is a simple WhatsApp bot using [Baileys](https://github.com/WhiskeySockets/
 
 ## ⚙️ Installation  
 
-### 1️⃣ Clone the repo
-```bash
-git clone https://github.com/YOUR-USERNAME/whatsapp-bot.git
-cd whatsapp-bot
 
-## 🚀 Deploy to Render
 
-Click the button below to deploy instantly:
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
 ---
 
