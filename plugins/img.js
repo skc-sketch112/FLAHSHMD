@@ -1,5 +1,3 @@
-const fetch = require("node-fetch");
-
 module.exports = {
     name: "img",
     description: "Search an image using Pixabay",
@@ -9,18 +7,17 @@ module.exports = {
         }
 
         const query = args.join(" ");
-        const apiKey = "YOUR_PIXABAY_API_KEY"; // 🔑 Replace with your Pixabay API key
+        const apiKey = "YOUR_PIXABAY_API_KEY"; // Replace with your key
         const url = `https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(query)}&image_type=photo&per_page=5&safesearch=true`;
 
         try {
-            const res = await fetch(url);
+            const res = await fetch(url); // fetch works natively in Node v18+
             const data = await res.json();
 
             if (!data.hits || data.hits.length === 0) {
                 return await sock.sendMessage(from, { text: `⚠️ No results found for: *${query}*` });
             }
 
-            // Pick a random image from results
             const image = data.hits[Math.floor(Math.random() * data.hits.length)].largeImageURL;
 
             await sock.sendMessage(from, {
