@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 // Command prefix
-const PREFIX = "!";
+const PREFIX = ".";
 
 // Load plugins
 let plugins = {};
@@ -24,9 +24,22 @@ function loadPlugins() {
     }
 }
 
-// Start bot
 async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("session");
+    const sessionPath = path.join(__dirname, "session");
+
+    let state, saveCreds;
+
+    try {
+        const auth = await useMultiFileAuthState("session");
+        state = auth.state;
+        saveCreds = auth.saveCreds;
+    } catch (err) {
+        console.log("⚠️ Session folder corrupted. Deleting and resetting...");
+        fs.rmSync(sessionPath, { recursive: true, force: true });
+        const auth = await useMultiFileAuthState("session");
+        state = auth.state;
+        saveCreds = auth.saveCreds;
+    }
 
     const sock = makeWASocket({
         logger: pino({ level: "silent" }),
@@ -42,15 +55,19 @@ async function startBot() {
         const { connection, lastDisconnect } = update;
         if (connection === "close") {
             const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
+
             if (reason === DisconnectReason.loggedOut) {
-                console.log("❌ Logged out. Scan QR again!");
+                console.log("❌ Logged out. Clearing session & restarting...");
+                fs.rmSync(sessionPath, { recursive: true, force: true });
                 startBot();
             } else {
                 console.log("🔄 Reconnecting...");
                 startBot();
             }
         } else if (connection === "open") {
-            console.log("✅ Bot connected!");
+            console.log("✅ Bot connected successfully!");
+        } else if (update.qr) {
+            console.log("📱 Scan this QR to connect your WhatsApp!");
         }
     });
 
