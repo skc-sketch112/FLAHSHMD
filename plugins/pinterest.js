@@ -2,7 +2,7 @@
 const fetch = require("node-fetch");
 
 // Get your free API key from: https://pixabay.com/api/docs/
-const PIXABAY_API_KEY = "YOUR_PIXABAY_API_KEY";  
+const PIXABAY_API_KEY = "51874106-2a96202d9815d07ac95dba697";  
 
 module.exports = {
     name: "pinterest",
