@@ -2,14 +2,22 @@
 
 let botMode = "public"; // default mode
 
+// set your owner number (without +, just countrycode+number)
+const ownerNumber = "919476189681"; // example: India number
+
 module.exports = {
     name: "mode",
     description: "Change bot working mode (public/self)",
-    run: async (sock, from, args, msg, isOwner = false) => {
+    run: async (sock, from, args, msg) => {
         try {
+            const sender = msg.key.participant || msg.key.remoteJid;
+
+            // Normalize number (remove @s.whatsapp.net)
+            const senderNumber = sender.replace(/[@:.]/g, "").replace("swhatsappnet", "");
+
             // Check if user is owner
-            if (!isOwner) {
-                return sock.sendMessage(from, { text: "❌ Only the bot owner can change mode." });
+            if (!sender.includes(ownerNumber)) {
+                return sock.sendMessage(from, { text: "❌ Only bot owner can change mode." });
             }
 
             // Show current mode
@@ -38,5 +46,5 @@ module.exports = {
             await sock.sendMessage(from, { text: "❌ Error changing mode. See logs." });
         }
     },
-    getMode: () => botMode // function for other plugins
+    getMode: () => botMode
 };
