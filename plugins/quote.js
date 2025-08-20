@@ -4,15 +4,15 @@ module.exports = {
     description: "Get a random inspirational quote",
     run: async (sock, from, args) => {
         try {
-            const res = await fetch("https://zenquotes.io/api/random");
+            const res = await fetch("https://api.quotable.io/random");
             const data = await res.json();
 
-            if (!data || !data[0] || !data[0].q) {
+            if (!data || !data.content) {
                 return sock.sendMessage(from, { text: "⚠️ Could not fetch a quote. Try again!" });
             }
 
             await sock.sendMessage(from, {
-                text: `🌟 *Random Quote* 🌟\n\n"${data[0].q}"\n\n— *${data[0].a}*`
+                text: `🌟 *Random Quote* 🌟\n\n"${data.content}"\n\n— *${data.author}*`
             });
         } catch (err) {
             console.error("Quote fetch error:", err);
