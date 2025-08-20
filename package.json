@@ -1,5 +1,5 @@
 {
-  "name": "whatsapp-bot",
+  "name": "SOURAV_MD",
   "version": "1.0.0",
   "description": "WhatsApp Bot with multiple plugins (tts, logo, song, sticker, etc.)",
   "main": "index.js",
@@ -8,15 +8,15 @@
   },
   "dependencies": {
     "@adiwajshing/baileys": "4.4.0",
-    "node-fetch": "^2.6.7",
-    "google-tts-api": "^2.0.2",
-    "axios": "^1.6.7",
-    "form-data": "^4.0.0",
+    "node-fetch": "2.6.7",
+    "google-tts-api": "2.0.2",
+    "axios": "1.6.7",
+    "form-data": "4.0.0",
     "cheerio": "1.0.0-rc.12",
-    "dotenv": "^16.3.1",
-    "fs-extra": "^11.2.0",
-    "ytdl-core": "^4.11.5",
-    "yt-search": "^2.10.4"
+    "dotenv": "16.3.1",
+    "fs-extra": "11.2.0",
+    "ytdl-core": "4.11.5",
+    "yt-search": "2.10.4"
   },
   "engines": {
     "node": "18.x"
