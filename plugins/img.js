@@ -1,7 +1,7 @@
 // plugins/img.js
 const fetch = require("node-fetch");
 
-const UNSPLASH_ACCESS_KEY = "Uebb0QGhkVela_0V0ZidmqYXDqAEHRYpV2UnemVHgLY"; // 🔑 Replace with your real Unsplash Access Key
+const UNSPLASH_ACCESS_KEY = "Uebb0QGhkVela_0V0ZidmqYXDqAEHRYpV2UnemVHgLY"; // 🔑 Replace with your Unsplash Access Key
 
 module.exports = {
     name: "img",
@@ -12,10 +12,10 @@ module.exports = {
                 return sock.sendMessage(from, { text: "⚠️ Usage: `!img <search term> [count]`\nExample: `!img cats 5`" });
             }
 
-            // If last arg is a number → use as count
+            // If last argument is a number → set as count
             let count = 3; // default
             if (!isNaN(args[args.length - 1])) {
-                count = Math.min(parseInt(args.pop()), 10); // max 10 images
+                count = Math.min(parseInt(args.pop()), 10); // max 10
             }
 
             const query = args.join(" ");
@@ -31,7 +31,7 @@ module.exports = {
             for (const img of data.results) {
                 await sock.sendMessage(from, {
                     image: { url: img.urls.regular },
-                    caption: `📸 *${query}*\nBy: ${img.user.name}\n🔗 ${img.links.html}`
+                    caption: `📸 *${query}*`
                 });
             }
 
