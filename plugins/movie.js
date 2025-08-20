@@ -1,7 +1,7 @@
 // plugins/movie.js
 const fetch = require("node-fetch");
 
-const OMDB_API_KEY = "429b5d5b"; // replace with your real key
+const TMDB_API_KEY = "cc6b8efb1833054f3bc6d0b6e403dfb7"; // replace with your real key
 
 module.exports = {
     name: "movie",
@@ -13,47 +13,43 @@ module.exports = {
             }
 
             const query = args.join(" ");
+            const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`;
 
-            // First try to search
-            const searchUrl = `https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${OMDB_API_KEY}`;
-            const searchRes = await fetch(searchUrl);
-            const searchData = await searchRes.json();
+            const res = await fetch(searchUrl);
+            const data = await res.json();
 
-            if (searchData.Response === "False") {
+            if (!data.results || data.results.length === 0) {
                 return sock.sendMessage(from, { text: `⚠️ No results found for: *${query}*` });
             }
 
-            // If only one result → fetch details
-            if (searchData.Search.length === 1) {
-                const exactTitle = searchData.Search[0].Title;
-                const detailsUrl = `https://www.omdbapi.com/?t=${encodeURIComponent(exactTitle)}&apikey=${OMDB_API_KEY}`;
-                const detailsRes = await fetch(detailsUrl);
-                const data = await detailsRes.json();
+            // Take first result
+            const movie = data.results[0];
 
-                let caption = `🎬 *${data.Title}* (${data.Year})\n\n` +
-                              `⭐ Rating: ${data.imdbRating}\n` +
-                              `📖 Plot: ${data.Plot}\n\n` +
-                              `🎭 Genre: ${data.Genre}\n` +
-                              `🎬 Director: ${data.Director}\n` +
-                              `🎤 Actors: ${data.Actors}\n\n` +
-                              `🌍 Language: ${data.Language}\n` +
-                              `🏆 Awards: ${data.Awards}`;
+            // Get details for richer info
+            const detailsUrl = `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`;
+            const detailsRes = await fetch(detailsUrl);
+            const details = await detailsRes.json();
 
-                return sock.sendMessage(from, {
-                    image: { url: data.Poster },
-                    caption
-                });
-            }
+            const poster = movie.poster_path
+                ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+                : null;
 
-            // If multiple results → show list
-            let list = searchData.Search
-                .slice(0, 8) // limit to 8 results
-                .map((m, i) => `🎬 *${i + 1}. ${m.Title}* (${m.Year})`)
-                .join("\n");
+            const cast = details.credits && details.credits.cast
+                ? details.credits.cast.slice(0, 5).map(a => a.name).join(", ")
+                : "N/A";
 
-            let caption = `🔍 Search results for: *${query}*\n\n${list}\n\n👉 Type: \`!movie <exact title>\` to get details.`;
+            let caption = `🎬 *${details.title}* (${details.release_date?.split("-")[0] || "N/A"})\n\n` +
+                          `⭐ Rating: ${details.vote_average} (${details.vote_count} votes)\n` +
+                          `📖 Overview: ${details.overview || "No description"}\n\n` +
+                          `🎭 Genres: ${details.genres.map(g => g.name).join(", ")}\n` +
+                          `🎤 Cast: ${cast}\n\n` +
+                          `⏳ Runtime: ${details.runtime} mins\n` +
+                          `🌍 Language: ${details.original_language.toUpperCase()}`;
 
-            return sock.sendMessage(from, { text: caption });
+            await sock.sendMessage(from, poster ? {
+                image: { url: poster },
+                caption
+            } : { text: caption });
 
         } catch (err) {
             console.error("Movie command error:", err);
