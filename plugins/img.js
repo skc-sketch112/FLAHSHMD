@@ -3,7 +3,7 @@ module.exports = {
     description: "Generate an image from a query",
     run: async (sock, from, args) => {
         if (!args || args.length === 0) {
-            return await sock.sendMessage(from, { text: "❌ Please provide a query.\nExample: `.img cat with crown`" });
+            return await sock.sendMessage(from, { text: "❌ Please provide a query.\nExample: `!img cat with crown`" });
         }
 
         const query = args.join(" ");
@@ -11,7 +11,7 @@ module.exports = {
 
         try {
             const url = `https://api.nekobot.xyz/imagegen?type=changemymind&text=${encodeURIComponent(query)}`;
-            const res = await fetch(url);  // ✅ native fetch (no require)
+            const res = await fetch(url);
             const json = await res.json();
 
             if (!json || !json.message) {
