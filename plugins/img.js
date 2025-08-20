@@ -7,7 +7,7 @@ module.exports = {
         }
 
         const query = args.join(" ");
-        const apiKey = "YOUR_PIXABAY_API_KEY"; // Replace with your key
+        const apiKey = "51874106-2a96202d9815d07ac95dba697"; // Replace with your key
         const url = `https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(query)}&image_type=photo&per_page=5&safesearch=true`;
 
         try {
