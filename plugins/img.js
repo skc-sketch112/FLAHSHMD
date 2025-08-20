@@ -10,23 +10,19 @@ module.exports = {
         await sock.sendMessage(from, { text: `🔍 Searching for images: *${query}* ...` });
 
         try {
-            // ✅ Generate multiple random Unsplash links
-            const urls = [
-                `https://source.unsplash.com/600x400/?${encodeURIComponent(query)}&sig=${Math.random()}`,
-                `https://source.unsplash.com/600x400/?${encodeURIComponent(query)}&sig=${Math.random()}`,
-                `https://source.unsplash.com/600x400/?${encodeURIComponent(query)}&sig=${Math.random()}`
-            ];
+            // ✅ Send 3 random Unsplash images directly
+            for (let i = 0; i < 3; i++) {
+                const url = `https://source.unsplash.com/600x400/?${encodeURIComponent(query)}&sig=${Date.now()}${i}`;
 
-            for (let url of urls) {
                 await sock.sendMessage(from, {
                     image: { url },
-                    caption: `✅ Here is an image for: *${query}*`
+                    caption: `✅ Image result for: *${query}*`
                 });
             }
 
         } catch (err) {
             console.error(err);
-            await sock.sendMessage(from, { text: "⚠️ Failed to fetch images. Try again later." });
+            await sock.sendMessage(from, { text: "⚠️ Error while sending images." });
         }
     }
 };
