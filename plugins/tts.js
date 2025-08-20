@@ -1,7 +1,7 @@
 // plugins/tts.js
 
 const gTTS = require("gtts");
-const fs = require("fs");
+const { Writable } = require("stream");
 
 module.exports = {
   name: "tts",
@@ -14,30 +14,28 @@ module.exports = {
         });
       }
 
-      // first argument is lang code
       const lang = args[0].toLowerCase();
       const text = args.slice(1).join(" ");
 
+      // Generate TTS
       const gtts = new gTTS(text, lang);
-      const filePath = "./tts.mp3";
+      let buffer = Buffer.alloc(0);
 
-      gtts.save(filePath, async function (err) {
-        if (err) {
-          console.error("TTS error:", err);
-          return await sock.sendMessage(from, { text: "❌ Error generating speech." });
+      const writable = new Writable({
+        write(chunk, encoding, next) {
+          buffer = Buffer.concat([buffer, chunk]);
+          next();
         }
+      });
 
-        // send as WhatsApp voice note
+      gtts.stream().pipe(writable);
+
+      writable.on("finish", async () => {
         await sock.sendMessage(from, {
-          audio: { url: filePath },
+          audio: buffer,
           mimetype: "audio/mp4",
-          ptt: true
+          ptt: true, // sends as voice note
         });
-
-        // clean up file
-        setTimeout(() => {
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        }, 5000);
       });
 
     } catch (err) {
