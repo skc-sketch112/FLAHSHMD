@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/whiskeysockets/baileys"><img src="https://img.shields.io/badge/Built%20with-Baileys-blue?style=for-the-badge"></a>
   <a href="#"><img src="https://img.shields.io/github/stars/yourusername/yourrepo?style=for-the-badge"></a>
-  <a href="#"><img src="https://img.shields.io/github/forks/yourusername/yourrepo?style=for-the-badge"></a>
+  <a href="#"><img src="https://github.com/skc-sketch112/SOURAV_MD_king"></a>
 </p>
 
 ---
