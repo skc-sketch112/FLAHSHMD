@@ -1,40 +1,85 @@
+// plugins/menu.js
+const fs = require("fs");
 const path = require("path");
 
 module.exports = {
-    name: "menu",
-    description: "Show bot menu with image and styled text",
-    run: async (sock, from, args, plugins) => {
-        // Banner image (your uploaded file path)
-        const bannerPath = path.join(__dirname, "../media/menu.jpg"); 
-        // Make sure you save your image inside a folder like `/media/menu.jpg`
+  name: "menu",
+  description: "Show all available commands",
+  run: async (sock, from) => {
+    try {
+      // Read plugin files
+      const pluginFiles = fs.readdirSync(path.join(__dirname))
+        .filter(f => f.endsWith(".js") && f !== "menu.js");
 
-        // Styled menu text
-        let menuText = `
-╭━〔 *SOURAV_MD BOT* 〕━╮
-┃ 👑 Owner » Sourav
-┃ 🤖 Prefix » !
-┃ 📦 Framework » Node.js
-┃ 🔌 Library » Baileys MD
-┃ ☁️ Hosting » Heroku / Render
-╰━━━━━━━━━━━━━━━╯
+      // Prepare categories
+      const categories = {
+        MEDIA: [],
+        KNOWLEDGE: [],
+        UTILITY: [],
+        OTHERS: []
+      };
 
-📜 *Available Commands* 📜
-`;
-
-        // Auto-list all plugins
-        for (const plugin of plugins.values()) {
-            menuText += `✨ *!${plugin.name}* → ${plugin.description || "No description"}\n`;
+      for (const file of pluginFiles) {
+        const plugin = require(path.join(__dirname, file));
+        if (plugin.name && plugin.description) {
+          if (["song", "img"].includes(plugin.name)) {
+            categories.MEDIA.push(plugin);
+          } else if (["quran", "quote", "fact"].includes(plugin.name)) {
+            categories.KNOWLEDGE.push(plugin);
+          } else if (["menu", "help"].includes(plugin.name)) {
+            categories.UTILITY.push(plugin);
+          } else {
+            categories.OTHERS.push(plugin);
+          }
         }
+      }
 
-        menuText += `
-━━━━━━━━━━━━━━━
-💡 Example: *!ping*
-        `;
+      // Build menu text
+      let menuText = "╔══✪〘 🤖 BOT MENU 〙✪══╗\n\n";
 
-        // Send banner image + menu text
-        await sock.sendMessage(from, {
-            image: { url: "https://files.catbox.moe/qcv0ls.jpg" }, // Or use local `bannerPath`
-            caption: menuText
-        });
+      if (categories.MEDIA.length > 0) {
+        menuText += "🎶 *MEDIA*\n";
+        for (const cmd of categories.MEDIA) {
+          menuText += `   ➤ !${cmd.name} → ${cmd.description}\n`;
+        }
+        menuText += "\n";
+      }
+
+      if (categories.KNOWLEDGE.length > 0) {
+        menuText += "📚 *KNOWLEDGE*\n";
+        for (const cmd of categories.KNOWLEDGE) {
+          menuText += `   ➤ !${cmd.name} → ${cmd.description}\n`;
+        }
+        menuText += "\n";
+      }
+
+      if (categories.UTILITY.length > 0) {
+        menuText += "⚙️ *UTILITY*\n";
+        for (const cmd of categories.UTILITY) {
+          menuText += `   ➤ !${cmd.name} → ${cmd.description}\n`;
+        }
+        menuText += "\n";
+      }
+
+      if (categories.OTHERS.length > 0) {
+        menuText += "✨ *OTHERS*\n";
+        for (const cmd of categories.OTHERS) {
+          menuText += `   ➤ !${cmd.name} → ${cmd.description}\n`;
+        }
+        menuText += "\n";
+      }
+
+      menuText += "╚════════════════════╝\n";
+
+      // Send menu with banner image
+      await sock.sendMessage(from, {
+        image: { url: "https://files.catbox.moe/qcv0ls.jpg" }, // replace with your own banner link
+        caption: menuText
+      });
+
+    } catch (err) {
+      console.error("Menu error:", err);
+      await sock.sendMessage(from, { text: "❌ Failed to load menu." });
     }
+  }
 };
