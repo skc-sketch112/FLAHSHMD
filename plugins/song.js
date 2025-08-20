@@ -1,74 +1,48 @@
 // plugins/song.js
 const fetch = require("node-fetch");
 
-// Piped (YouTube) instances to try if Saavn fails
+// Fresh working Piped mirrors (add more if needed)
 const PIPED_INSTANCES = [
-  "https://piped.video",
   "https://pipedapi.kavin.rocks",
-  "https://piped.mha.fi"
+  "https://pipedapi.syncpundit.com",
+  "https://pipedapi.esmailelbob.xyz"
 ];
 
-async function fetchJson(url, opts = {}) {
+// Fetch JSON with timeout
+async function fetchJson(url) {
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 12000); // 12s timeout
+  const timeout = setTimeout(() => controller.abort(), 12000); // 12 sec
   try {
     const res = await fetch(url, {
-      ...opts,
       signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0", ...(opts.headers || {}) }
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
-    clearTimeout(t);
+    clearTimeout(timeout);
   }
 }
 
-async function trySaavn(query) {
-  try {
-    const url = `https://saavn.dev/api/search/songs?query=${encodeURIComponent(query)}&page=1&limit=1`;
-    const json = await fetchJson(url);
-    const results = json?.data?.results;
-    if (!results || results.length === 0) return null;
-
-    const song = results[0];
-    const dlArr = Array.isArray(song.downloadUrl) ? song.downloadUrl : [];
-    const best = dlArr.length ? dlArr[dlArr.length - 1] : null; // highest quality last (usually 320kbps)
-    const downloadUrl = best?.link;
-
-    if (!downloadUrl) return null;
-
-    return {
-      title: song.name,
-      artist: song.primaryArtists || "Unknown",
-      url: downloadUrl,
-      mime: "audio/mp4",
-      source: "saavn"
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function tryPiped(query) {
+// Try multiple Piped instances
+async function getFromPiped(query) {
   for (const base of PIPED_INSTANCES) {
     try {
+      // search videos
       const search = await fetchJson(`${base}/api/v1/search?q=${encodeURIComponent(query)}&region=IN`);
       const first = (search || []).find(i => i.type === "stream" || i.type === "video");
       if (!first) continue;
 
-      // Get video ID robustly
-      const id =
-        first.id ||
-        (first.url && (first.url.split("v=").pop() || first.url.split("/").pop()));
-
+      // get video id
+      const id = first.id || (first.url && first.url.split("v=").pop());
       if (!id) continue;
 
+      // get audio streams
       const streams = await fetchJson(`${base}/api/v1/streams/${id}`);
       const audios = streams?.audioStreams || [];
       if (!audios.length) continue;
 
-      // Prefer m4a/mp4a, else highest bitrate
+      // pick best audio (m4a preferred)
       const preferred =
         audios.find(a => /m4a|mp4a/i.test(a.codec || "")) ||
         audios.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
@@ -80,10 +54,10 @@ async function tryPiped(query) {
         artist: (streams.uploader || first.uploader || "Unknown").replace(" - Topic", ""),
         url: preferred.url,
         mime: "audio/mpeg",
-        source: "piped"
+        source: base
       };
-    } catch {
-      // try next instance
+    } catch (e) {
+      console.log(`Piped mirror failed: ${base}`, e.message);
       continue;
     }
   }
@@ -92,26 +66,21 @@ async function tryPiped(query) {
 
 module.exports = {
   name: "song",
-  description: "Download a song (Saavn with YouTube fallback)",
+  description: "Download song (YouTube audio via Piped)",
   run: async (sock, from, args) => {
     try {
       if (!args || !args.length) {
-        return sock.sendMessage(from, { text: "🎵 Usage: `!song <song name>`\nExample: `!song Believer`" });
+        return sock.sendMessage(from, { text: "🎵 Usage: `!song <name>`\nExample: `!song Believer`" });
       }
 
       const query = args.join(" ");
-
-      // 1) Try Saavn (full track, often 320kbps)
-      let result = await trySaavn(query);
-
-      // 2) Fallback to Piped (YouTube audio)
-      if (!result) result = await tryPiped(query);
+      const result = await getFromPiped(query);
 
       if (!result) {
-        return sock.sendMessage(from, { text: `❌ Couldn't find audio for *${query}*. Try a different name.` });
+        return sock.sendMessage(from, { text: `❌ Could not find audio for *${query}*.` });
       }
 
-      const caption = `🎶 *${result.title}*\n🎤 ${result.artist}\n🗂 Source: ${result.source.toUpperCase()}`;
+      const caption = `🎶 *${result.title}*\n🎤 ${result.artist}\n📡 Source: YouTube`;
 
       await sock.sendMessage(from, {
         audio: { url: result.url },
