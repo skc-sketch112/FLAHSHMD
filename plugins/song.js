@@ -1,9 +1,6 @@
 // plugins/song.js
 const yts = require("yt-search");
 const ytdl = require("ytdl-core");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
 
 module.exports = {
   name: "song",
@@ -21,38 +18,31 @@ module.exports = {
       const video = search.videos && search.videos[0];
       if (!video) return sock.sendMessage(from, { text: "⚠️ No results found." });
 
-      // ⚡ Check duration (limit to 10 minutes)
+      // ⏱ Duration check
       if (video.seconds > 600) {
         return sock.sendMessage(from, { text: "⚠️ Song is too long (limit: 10 minutes)." });
       }
 
-      const id = video.videoId;
-      const tmpDir = os.tmpdir();
-      const outPath = path.join(tmpDir, `${id}.mp3`);
-
-      // Download audio-only
-      await new Promise((resolve, reject) => {
-        const stream = ytdl(video.url, { filter: "audioonly", quality: "highestaudio" })
-          .pipe(fs.createWriteStream(outPath));
-        stream.on("finish", resolve);
-        stream.on("error", reject);
+      // 🎶 Fetch audio as buffer (no file saving)
+      const audioBuffer = await new Promise((resolve, reject) => {
+        const chunks = [];
+        ytdl(video.url, { filter: "audioonly", quality: "highestaudio" })
+          .on("data", (chunk) => chunks.push(chunk))
+          .on("end", () => resolve(Buffer.concat(chunks)))
+          .on("error", reject);
       });
 
-      // ⚡ Check file size (WhatsApp limit ~16MB)
-      const stats = fs.statSync(outPath);
-      if (stats.size > 16 * 1024 * 1024) { // 16MB
-        fs.unlinkSync(outPath);
+      // ⚡ Size check (16MB limit)
+      if (audioBuffer.length > 16 * 1024 * 1024) {
         return sock.sendMessage(from, { text: "⚠️ File too large for WhatsApp (limit: 16MB)." });
       }
 
-      // Send song
+      // ✅ Send audio
       await sock.sendMessage(from, {
-        audio: { url: outPath },
+        audio: audioBuffer,
         mimetype: "audio/mpeg",
         fileName: `${video.title}.mp3`
       });
-
-      try { fs.unlinkSync(outPath); } catch {}
 
     } catch (err) {
       console.error("Song download error:", err);
