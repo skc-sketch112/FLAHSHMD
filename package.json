@@ -7,7 +7,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@adiwajshing/baileys": "4.4.0",
+    "@whiskeysockets/baileys": "6.7.9",
     "node-fetch": "2.6.7",
     "google-tts-api": "2.0.2",
     "axios": "1.6.7",
