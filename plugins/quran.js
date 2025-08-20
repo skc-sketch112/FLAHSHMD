@@ -1,6 +1,3 @@
-const fetch = require("node-fetch");
-
-// Full Surah mapping (English transliterations → Surah number)
 const surahMap = {
     fatiha: 1, baqarah: 2, imran: 3, nisa: 4, maidah: 5, anam: 6, araf: 7,
     anfal: 8, tawbah: 9, yunus: 10, hud: 11, yusuf: 12, raad: 13, ibrahim: 14,
@@ -24,18 +21,18 @@ const surahMap = {
 
 module.exports = {
     name: "quran",
-    description: "Get Quran verse by Surah name/number and Ayah",
+    description: "Get Quran verse(s) by Surah and Ayah",
     run: async (sock, from, args) => {
         if (!args || args.length < 2) {
-            return await sock.sendMessage(from, { 
-                text: "❌ Usage: `!quran <surah_name/number> <ayah_number>`\nExample: `!quran fatiha 1` or `!quran 2 255`"
+            return sock.sendMessage(from, { 
+                text: "❌ Usage: `!quran <surah_name/number> <ayah_number>` or `!quran <surah> <start-end>`\nExample: `!quran fatiha 1-7` or `!quran baqarah 255`"
             });
         }
 
         let surah = args[0].toLowerCase();
-        const ayah = args[1];
+        let ayahInput = args[1];
 
-        // Convert surah name to number if available
+        // convert surah to number if string
         if (isNaN(surah)) {
             surah = surahMap[surah];
         } else {
@@ -43,29 +40,43 @@ module.exports = {
         }
 
         if (!surah || surah < 1 || surah > 114) {
-            return await sock.sendMessage(from, { text: "⚠️ Invalid surah. Try again with a correct surah name or number." });
+            return sock.sendMessage(from, { text: "⚠️ Invalid surah. Use a valid surah name or number (1-114)." });
         }
 
         try {
-            const url = `https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/en.asad`;
-            const res = await fetch(url);
-            const data = await res.json();
+            let verses = [];
 
-            if (!data || !data.data) {
-                return await sock.sendMessage(from, { text: "⚠️ Verse not found." });
+            if (ayahInput.includes("-")) {
+                // range e.g. 1-7
+                const [start, end] = ayahInput.split("-").map(n => parseInt(n, 10));
+                for (let i = start; i <= end; i++) {
+                    const res = await fetch(`https://api.alquran.cloud/v1/ayah/${surah}:${i}/en.asad`);
+                    const json = await res.json();
+                    if (json && json.data) {
+                        verses.push(`(${i}) ${json.data.text}`);
+                    }
+                }
+            } else {
+                // single ayah
+                const ayah = parseInt(ayahInput, 10);
+                const res = await fetch(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/en.asad`);
+                const json = await res.json();
+                if (json && json.data) {
+                    verses.push(`(${ayah}) ${json.data.text}`);
+                }
             }
 
-            const verse = data.data.text;
-            const surahName = data.data.surah.englishName;
-            const revelation = data.data.surah.revelationType;
+            if (verses.length === 0) {
+                return sock.sendMessage(from, { text: "⚠️ Verse(s) not found." });
+            }
 
             await sock.sendMessage(from, {
-                text: `📖 *Surah:* ${surahName} (${revelation})\n🔢 *Ayah:* ${ayah}\n\n"${verse}"`
+                text: `📖 *Surah ${surah}*\n\n${verses.join("\n\n")}`
             });
 
         } catch (err) {
             console.error("Quran fetch error:", err);
-            await sock.sendMessage(from, { text: "❌ Error fetching Quran verse. Try again later." });
+            await sock.sendMessage(from, { text: "❌ Error fetching Quran verse(s). Try again later." });
         }
     }
 };
