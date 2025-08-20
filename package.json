@@ -1,17 +1,24 @@
 {
-  "name": "sourav-md-bot",
+  "name": "SOURAV_MD",
   "version": "1.0.0",
-  "description": "WhatsApp Bot using Baileys with plugin system",
+  "description": "WhatsApp Bot with plugins (tts, logo, sticker, etc.)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.8",
+    "@adiwajshing/baileys": "^6.7.5", 
     "node-fetch": "^2.6.7",
-    "yt-search": "^2.11.1",
-    "ytdl-core": "^4.11.5",
-    "fluent-ffmpeg": "^2.1.2",
-    "ffmpeg-static": "^5.2.0"
-  }
+    "google-tts-api": "^2.0.2",
+    "axios": "^1.6.7",
+    "form-data": "^4.0.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.3.1",
+    "fs-extra": "^11.2.0"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "author": "your-name",
+  "license": "MIT"
 }
