@@ -1,45 +1,55 @@
+// plugins/song.js
 const yts = require("yt-search");
 const ytdl = require("ytdl-core");
 const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 module.exports = {
     name: "song",
-    description: "Download songs from YouTube",
+    description: "Download a song from YouTube and send as audio",
     run: async (sock, from, args) => {
         if (!args || args.length === 0) {
-            return await sock.sendMessage(from, { text: "❌ Please provide a song name.\nExample: `.song shape of you`" });
+            return sock.sendMessage(from, { text: "❌ Provide a song name.\nExample: `!song shape of you`" });
         }
 
         const query = args.join(" ");
-        await sock.sendMessage(from, { text: `🎵 Searching for: *${query}* ...` });
+        await sock.sendMessage(from, { text: `🎵 Searching: *${query}* ...` });
 
         try {
-            // Search song on YouTube
+            // 🔎 Search on YouTube
             const search = await yts(query);
-            if (!search.videos.length) {
-                return await sock.sendMessage(from, { text: "⚠️ No results found!" });
-            }
+            const video = search.videos && search.videos[0];
+            if (!video) return sock.sendMessage(from, { text: "⚠️ No results found." });
 
-            const video = search.videos[0]; // First result
-            const stream = ytdl(video.url, { filter: "audioonly", quality: "highestaudio" });
+            const id = video.videoId;
+            const tmpDir = os.tmpdir();
+            const outPath = path.join(tmpDir, `${id}.webm`); // audio file
 
-            const filePath = `./${video.videoId}.mp3`;
-            const writeStream = fs.createWriteStream(filePath);
-            stream.pipe(writeStream);
-
-            writeStream.on("finish", async () => {
-                await sock.sendMessage(from, {
-                    audio: { url: filePath },
-                    mimetype: "audio/mp4",
-                    ptt: false
-                }, { quoted: null });
-
-                fs.unlinkSync(filePath); // delete after sending
+            // 📥 Download audio-only stream
+            await new Promise((resolve, reject) => {
+                const rs = ytdl(video.url, { filter: "audioonly", quality: "highestaudio" });
+                const ws = fs.createWriteStream(outPath);
+                rs.pipe(ws);
+                rs.on("error", reject);
+                ws.on("error", reject);
+                ws.on("finish", resolve);
             });
+
+            // 🎶 Send audio
+            await sock.sendMessage(from, {
+                audio: { url: outPath },
+                mimetype: "audio/webm",
+                fileName: `${video.title}.webm`,
+                ptt: false
+            });
+
+            // 🧹 Cleanup
+            try { fs.unlinkSync(outPath); } catch {}
 
         } catch (err) {
             console.error("Song download error:", err);
-            await sock.sendMessage(from, { text: "❌ Error while downloading song. Try again later." });
+            await sock.sendMessage(from, { text: "❌ Song download failed. Try again later." });
         }
     }
 };
