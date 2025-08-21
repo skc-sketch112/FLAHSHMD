@@ -6,13 +6,11 @@ const {
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const fs = require("fs");
-const path = require("path");
 
 // ✅ Universal text extractor
 function extractMessageText(msg) {
     try {
         const m = msg.message;
-
         if (m.conversation) return m.conversation;
         if (m.extendedTextMessage) return m.extendedTextMessage.text;
         if (m.imageMessage?.caption) return m.imageMessage.caption;
@@ -26,17 +24,6 @@ function extractMessageText(msg) {
     }
     return "";
 }
-
-// ✅ Load plugins
-const plugins = {};
-const pluginPath = path.join(__dirname, "plugins");
-fs.readdirSync(pluginPath).forEach(file => {
-    if (file.endsWith(".js")) {
-        const plugin = require(path.join(pluginPath, file));
-        plugins[plugin.name] = plugin;
-        console.log(`✅ Loaded plugin: ${plugin.name}`);
-    }
-});
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState("session");
@@ -54,7 +41,7 @@ async function startBot() {
 
         if (qr) {
             const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-            console.log("📱 Scan QR from console OR open this link to scan:\n", qrLink);
+            console.log("📱 Scan QR from console OR open this link:\n", qrLink);
         }
 
         if (connection === "close") {
@@ -74,7 +61,7 @@ async function startBot() {
         }
     });
 
-    // ✅ Message handler
+    // ✅ Message handler with built-in commands
     const prefix = ".";
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
@@ -82,6 +69,8 @@ async function startBot() {
 
         const from = msg.key.remoteJid;
         const text = extractMessageText(msg);
+
+        console.log("📩 Incoming:", text);
 
         if (!text) return;
         if (!text.startsWith(prefix)) return;
@@ -91,14 +80,17 @@ async function startBot() {
 
         console.log("⚡ Command detected:", cmd);
 
-        if (plugins[cmd]) {
-            try {
-                await plugins[cmd].run(sock, from, args, msg);
-            } catch (err) {
-                console.error(`❌ Error running command ${cmd}:`, err);
-            }
-        } else {
-            console.log("❌ No plugin found for:", cmd);
+        // 🔹 Built-in commands
+        if (cmd === "ping") {
+            await sock.sendMessage(from, { text: "🏓 Pong! Bot is alive 🚀" });
+        }
+        else if (cmd === "menu") {
+            await sock.sendMessage(from, {
+                text: `📜 *Bot Menu*\n\n🔹 .ping → Check bot status\n🔹 .menu → Show this menu`
+            });
+        }
+        else {
+            await sock.sendMessage(from, { text: `❌ Unknown command: ${cmd}` });
         }
     });
 
