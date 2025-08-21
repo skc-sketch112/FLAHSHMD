@@ -1,68 +1,77 @@
 const {
   default: makeWASocket,
-  useMultiFileAuthState
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion
 } = require("@whiskeysockets/baileys");
-const express = require("express");
-const qrcode = require("qrcode");
-const pino = require("pino");
 const fs = require("fs");
 const path = require("path");
+const readline = require("readline");
+const pino = require("pino");
 
-// Store latest QR
-let latestQR = null;
-
-// Load all plugins
-const plugins = {};
-function loadPlugins() {
-  const pluginPath = path.join(__dirname, "plugins");
-  if (!fs.existsSync(pluginPath)) fs.mkdirSync(pluginPath);
-
-  fs.readdirSync(pluginPath).forEach((file) => {
-    if (file.endsWith(".js")) {
-      const pluginName = file.replace(".js", "");
-      try {
-        const plugin = require(path.join(pluginPath, file));
-        plugins[pluginName] = plugin;
-        console.log(`✅ Loaded plugin: ${pluginName}`);
-      } catch (err) {
-        console.error(`❌ Failed to load plugin ${pluginName}:`, err);
-      }
-    }
-  });
+// 📌 Console input
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+function ask(q) {
+  return new Promise((res) => rl.question(q, res));
 }
 
-// Start bot
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
+  const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
-    printQRInTerminal: false, // QR will be on web instead
+    version,
     auth: state,
-    logger: pino({ level: "silent" })
+    logger: pino({ level: "silent" }),
+    printQRInTerminal: false // ❌ No QR
   });
 
   sock.ev.on("creds.update", saveCreds);
 
+  // 🔄 Connection status
   sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      latestQR = qr;
-      console.log("📲 New QR generated. Open /qr in browser to scan.");
-    }
-
-    if (connection === "open") {
-      console.log("✅ Bot connected!");
-      latestQR = null;
-    }
-
-    if (connection === "close") {
-      console.log("⚠️ Connection closed. Reconnecting...");
+    const { connection, lastDisconnect } = update;
+    if (connection === "open") console.log("✅ Bot connected successfully!");
+    else if (connection === "close") {
+      console.log("⚠️ Connection closed, reconnecting...");
       startBot();
     }
   });
 
-  // Handle commands
+  // 📌 First-time login with phone number
+  if (!state.creds.registered) {
+    const phoneNumber = await ask("📲 Enter WhatsApp number with country code (e.g., +919876543210): ");
+    const code = await sock.requestPairingCode(phoneNumber.trim());
+    console.log(`🔑 Your pairing code is: ${code}`);
+    console.log("👉 Enter this code in WhatsApp → Linked Devices → Link with code.");
+    rl.close();
+  }
+
+  // 📂 Load plugins dynamically
+  const plugins = {};
+  const pluginsDir = path.join(__dirname, "plugins");
+
+  function loadPlugins() {
+    fs.readdirSync(pluginsDir).forEach((file) => {
+      if (file.endsWith(".js")) {
+        const pluginPath = path.join(pluginsDir, file);
+        delete require.cache[require.resolve(pluginPath)];
+        try {
+          const plugin = require(pluginPath);
+          plugins[plugin.name] = plugin;
+          console.log(`✅ Loaded plugin: ${plugin.name}`);
+        } catch (err) {
+          console.error(`❌ Error loading ${file}:`, err);
+        }
+      }
+    });
+  }
+
+  loadPlugins();
+
+  // 📌 Command handler
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const m = messages[0];
     if (!m.message || m.key.fromMe) return;
@@ -74,15 +83,14 @@ async function startBot() {
       "";
 
     if (!text.startsWith("!")) return;
-
-    const [cmd, ...args] = text.slice(1).trim().split(" ");
-    const command = cmd.toLowerCase();
+    const args = text.trim().split(/\s+/);
+    const command = args.shift().slice(1).toLowerCase();
 
     if (plugins[command]) {
       try {
         await plugins[command].run(sock, from, args, m);
-      } catch (err) {
-        console.error(`❌ Error in plugin ${command}:`, err);
+      } catch (e) {
+        console.error(`❌ Error in command ${command}:`, e);
         await sock.sendMessage(from, { text: "⚠️ Error executing command." });
       }
     } else {
@@ -91,29 +99,4 @@ async function startBot() {
   });
 }
 
-// Web server to show QR
-const app = express();
-
-app.get("/", (req, res) => {
-  res.send(
-    "✅ WhatsApp Bot is running.<br/>Go to <a href='/qr'>/qr</a> to scan QR."
-  );
-});
-
-app.get("/qr", async (req, res) => {
-  if (!latestQR) {
-    return res.send("No QR available (already connected or not generated yet).");
-  }
-  const qrImage = await qrcode.toDataURL(latestQR);
-  res.send(`<h2>📲 Scan this QR with WhatsApp</h2><img src="${qrImage}"/>`);
-});
-
-// Start web server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🌐 Server running on http://localhost:${PORT}`);
-});
-
-// Load plugins and start bot
-loadPlugins();
 startBot();
