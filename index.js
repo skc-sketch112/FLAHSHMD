@@ -6,6 +6,7 @@ const {
 } = require("@whiskeysockets/baileys")
 const pino = require("pino")
 const path = require("path")
+const fs = require("fs")
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion()
@@ -19,11 +20,13 @@ async function startBot() {
         auth: state,
     })
 
-    // Connection handling
+    // 🔗 QR Code Link
     sock.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
         if (qr) {
             console.log("📲 Scan this QR to connect:")
-            console.log(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`)
+            console.log(
+                `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`
+            )
         }
 
         if (connection === "close") {
@@ -38,14 +41,21 @@ async function startBot() {
 
     sock.ev.on("creds.update", saveCreds)
 
-    // 📩 Listen for messages
+    // 📦 Load Plugins
+    const commands = new Map()
+    fs.readdirSync("./commands").forEach(file => {
+        if (file.endsWith(".js")) {
+            const cmd = require(`./commands/${file}`)
+            commands.set(cmd.name, cmd)
+        }
+    })
+
+    // 📩 Message Handler
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0]
-        if (!msg) return   // allow self messages ✅
+        if (!msg) return
 
         const sender = msg.key.remoteJid
-
-        // Extract text message
         let textMessage =
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
@@ -56,21 +66,18 @@ async function startBot() {
         textMessage = textMessage.trim()
         console.log(`💬 Message from ${sender}: ${textMessage}`)
 
-        // Prefix system
         const prefix = "."
         if (!textMessage.startsWith(prefix)) return
 
-        const command = textMessage.slice(prefix.length).toLowerCase()
+        const commandName = textMessage.slice(prefix.length).toLowerCase()
 
-        // ⚡ Commands
-        if (command === "ping") {
-            await sock.sendMessage(sender, { text: "pong ✅" })
-        }
-
-        if (command === "menu") {
-            await sock.sendMessage(sender, {
-                text: "🤖 *Bot Menu*\n\n1. .ping → pong\n2. .menu → show this menu"
-            })
+        if (commands.has(commandName)) {
+            try {
+                await commands.get(commandName).execute(sock, sender, msg)
+            } catch (e) {
+                console.error("❌ Command error:", e)
+                await sock.sendMessage(sender, { text: "⚠️ Command error" })
+            }
         }
     })
 }
