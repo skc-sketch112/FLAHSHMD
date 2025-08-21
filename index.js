@@ -6,24 +6,22 @@ const {
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const fs = require("fs");
-const path = require("path");
 
-// ✅ Universal text extractor
-function extractMessageText(msg) {
+// ✅ Extract plain text from any WhatsApp message
+function getText(msg) {
     try {
-        const m = msg.message;
-        if (!m) return "";
+        if (!msg.message) return "";
 
-        if (m.conversation) return m.conversation;
-        if (m.extendedTextMessage) return m.extendedTextMessage.text;
-        if (m.imageMessage?.caption) return m.imageMessage.caption;
-        if (m.videoMessage?.caption) return m.videoMessage.caption;
-        if (m.buttonsResponseMessage) return m.buttonsResponseMessage.selectedButtonId;
-        if (m.listResponseMessage) return m.listResponseMessage.singleSelectReply.selectedRowId;
-        if (m.ephemeralMessage) return extractMessageText(m.ephemeralMessage.message);
-        if (m.viewOnceMessageV2) return extractMessageText(m.viewOnceMessageV2.message);
+        if (msg.message.conversation) return msg.message.conversation;
+        if (msg.message.extendedTextMessage) return msg.message.extendedTextMessage.text;
+        if (msg.message.imageMessage?.caption) return msg.message.imageMessage.caption;
+        if (msg.message.videoMessage?.caption) return msg.message.videoMessage.caption;
+
+        if (msg.message.ephemeralMessage) return getText(msg.message.ephemeralMessage.message);
+        if (msg.message.viewOnceMessageV2) return getText(msg.message.viewOnceMessageV2.message);
+
     } catch (e) {
-        console.error("❌ extractMessageText error:", e);
+        console.error("❌ getText error:", e);
     }
     return "";
 }
@@ -34,7 +32,7 @@ async function startBot() {
     const sock = makeWASocket({
         logger: pino({ level: "silent" }),
         auth: state,
-        printQRInTerminal: true
+        printQRInTerminal: true // show QR in console
     });
 
     sock.ev.on("creds.update", saveCreds);
@@ -43,8 +41,10 @@ async function startBot() {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
+            // ✅ Generate a scan link with online QR
             const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-            console.log("📱 Scan QR from console OR open this link to scan:\n", qrLink);
+            console.log("\n📱 Scan this QR in console OR open this link in browser:");
+            console.log(qrLink, "\n");
         }
 
         if (connection === "close") {
@@ -64,34 +64,28 @@ async function startBot() {
         }
     });
 
-    // ✅ Message handler
-    const prefix = ".";
+    // ✅ Handle incoming messages
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
-
-        // 🔍 Debug: log raw message
-        console.log("📩 RAW MESSAGE:", JSON.stringify(msg, null, 2));
-
         if (!msg.message || msg.key.fromMe) return;
 
         const from = msg.key.remoteJid;
-        const text = extractMessageText(msg);
+        const text = getText(msg);
+
+        console.log("📩 RAW TEXT:", text);
 
         if (!text) return;
-        if (!text.startsWith(prefix)) return;
+        if (!text.startsWith(".")) return;
 
-        const args = text.slice(prefix.length).trim().split(/ +/);
+        const args = text.slice(1).trim().split(/ +/);
         const cmd = args.shift().toLowerCase();
 
-        console.log("⚡ Command detected:", cmd);
+        console.log("⚡ Command:", cmd);
 
-        // ✅ Basic built-in commands
         if (cmd === "ping") {
             await sock.sendMessage(from, { text: "🏓 Pong! Bot is alive." });
         } else if (cmd === "menu") {
-            await sock.sendMessage(from, {
-                text: `✨ *Bot Menu* ✨\n\n• .ping - Test bot\n• .menu - Show this menu`
-            });
+            await sock.sendMessage(from, { text: "✨ Menu:\n• .ping\n• .menu" });
         } else {
             await sock.sendMessage(from, { text: `❌ Unknown command: ${cmd}` });
         }
