@@ -1,3 +1,4 @@
+// index.js
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -7,43 +8,35 @@ const pino = require("pino");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ Parse text from any type of message
-function getTextMessage(msg) {
-    if (!msg.message) return "";
+// ✅ Universal text extractor
+function extractMessageText(msg) {
+    try {
+        const m = msg.message;
 
-    if (msg.message.conversation) return msg.message.conversation;
-    if (msg.message.extendedTextMessage) return msg.message.extendedTextMessage.text;
-    if (msg.message.imageMessage && msg.message.imageMessage.caption) return msg.message.imageMessage.caption;
-    if (msg.message.videoMessage && msg.message.videoMessage.caption) return msg.message.videoMessage.caption;
-
+        if (m.conversation) return m.conversation;
+        if (m.extendedTextMessage) return m.extendedTextMessage.text;
+        if (m.imageMessage?.caption) return m.imageMessage.caption;
+        if (m.videoMessage?.caption) return m.videoMessage.caption;
+        if (m.buttonsResponseMessage) return m.buttonsResponseMessage.selectedButtonId;
+        if (m.listResponseMessage) return m.listResponseMessage.singleSelectReply.selectedRowId;
+        if (m.ephemeralMessage) return extractMessageText(m.ephemeralMessage.message);
+        if (m.viewOnceMessageV2) return extractMessageText(m.viewOnceMessageV2.message);
+    } catch (e) {
+        console.error("❌ extractMessageText error:", e);
+    }
     return "";
 }
 
 // ✅ Load plugins
-function loadPlugins() {
-    const plugins = {};
-    const pluginDir = path.join(__dirname, "plugins");
-
-    if (!fs.existsSync(pluginDir)) {
-        fs.mkdirSync(pluginDir);
+const plugins = {};
+const pluginPath = path.join(__dirname, "plugins");
+fs.readdirSync(pluginPath).forEach(file => {
+    if (file.endsWith(".js")) {
+        const plugin = require(path.join(pluginPath, file));
+        plugins[plugin.name] = plugin;
+        console.log(`✅ Loaded plugin: ${plugin.name}`);
     }
-
-    fs.readdirSync(pluginDir).forEach(file => {
-        if (file.endsWith(".js")) {
-            try {
-                const plugin = require(path.join(pluginDir, file));
-                if (plugin.name && plugin.run) {
-                    plugins[plugin.name] = plugin;
-                    console.log(`✅ Loaded plugin: ${plugin.name}`);
-                }
-            } catch (err) {
-                console.error(`❌ Failed to load plugin ${file}:`, err);
-            }
-        }
-    });
-
-    return plugins;
-}
+});
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState("session");
@@ -51,36 +44,10 @@ async function startBot() {
     const sock = makeWASocket({
         logger: pino({ level: "silent" }),
         auth: state,
-        printQRInTerminal: true,
+        printQRInTerminal: true
     });
 
     sock.ev.on("creds.update", saveCreds);
-
-    const plugins = loadPlugins();
-    const prefix = ".";
-
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-
-        const text = getTextMessage(msg);
-        const from = msg.key.remoteJid;
-
-        console.log("📩 New message:", text);
-
-        if (!text.startsWith(prefix)) return;
-
-        const args = text.slice(prefix.length).trim().split(/ +/);
-        const cmd = args.shift().toLowerCase();
-
-        if (plugins[cmd]) {
-            try {
-                await plugins[cmd].run(sock, from, args, msg);
-            } catch (err) {
-                console.error(`❌ Error running command ${cmd}:`, err);
-            }
-        }
-    });
 
     sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -104,6 +71,34 @@ async function startBot() {
 
         if (connection === "open") {
             console.log("✅ Bot connected to WhatsApp!");
+        }
+    });
+
+    // ✅ Message handler
+    const prefix = ".";
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+        const msg = messages[0];
+        if (!msg.message || msg.key.fromMe) return;
+
+        const from = msg.key.remoteJid;
+        const text = extractMessageText(msg);
+
+        if (!text) return;
+        if (!text.startsWith(prefix)) return;
+
+        const args = text.slice(prefix.length).trim().split(/ +/);
+        const cmd = args.shift().toLowerCase();
+
+        console.log("⚡ Command detected:", cmd);
+
+        if (plugins[cmd]) {
+            try {
+                await plugins[cmd].run(sock, from, args, msg);
+            } catch (err) {
+                console.error(`❌ Error running command ${cmd}:`, err);
+            }
+        } else {
+            console.log("❌ No plugin found for:", cmd);
         }
     });
 
