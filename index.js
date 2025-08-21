@@ -6,11 +6,14 @@ const {
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const fs = require("fs");
+const path = require("path");
 
 // ✅ Universal text extractor
 function extractMessageText(msg) {
     try {
         const m = msg.message;
+        if (!m) return "";
+
         if (m.conversation) return m.conversation;
         if (m.extendedTextMessage) return m.extendedTextMessage.text;
         if (m.imageMessage?.caption) return m.imageMessage.caption;
@@ -41,7 +44,7 @@ async function startBot() {
 
         if (qr) {
             const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-            console.log("📱 Scan QR from console OR open this link:\n", qrLink);
+            console.log("📱 Scan QR from console OR open this link to scan:\n", qrLink);
         }
 
         if (connection === "close") {
@@ -61,16 +64,18 @@ async function startBot() {
         }
     });
 
-    // ✅ Message handler with built-in commands
+    // ✅ Message handler
     const prefix = ".";
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
+
+        // 🔍 Debug: log raw message
+        console.log("📩 RAW MESSAGE:", JSON.stringify(msg, null, 2));
+
         if (!msg.message || msg.key.fromMe) return;
 
         const from = msg.key.remoteJid;
         const text = extractMessageText(msg);
-
-        console.log("📩 Incoming:", text);
 
         if (!text) return;
         if (!text.startsWith(prefix)) return;
@@ -80,16 +85,14 @@ async function startBot() {
 
         console.log("⚡ Command detected:", cmd);
 
-        // 🔹 Built-in commands
+        // ✅ Basic built-in commands
         if (cmd === "ping") {
-            await sock.sendMessage(from, { text: "🏓 Pong! Bot is alive 🚀" });
-        }
-        else if (cmd === "menu") {
+            await sock.sendMessage(from, { text: "🏓 Pong! Bot is alive." });
+        } else if (cmd === "menu") {
             await sock.sendMessage(from, {
-                text: `📜 *Bot Menu*\n\n🔹 .ping → Check bot status\n🔹 .menu → Show this menu`
+                text: `✨ *Bot Menu* ✨\n\n• .ping - Test bot\n• .menu - Show this menu`
             });
-        }
-        else {
+        } else {
             await sock.sendMessage(from, { text: `❌ Unknown command: ${cmd}` });
         }
     });
