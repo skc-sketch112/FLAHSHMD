@@ -1,8 +1,8 @@
+// plugins/ping.js
 module.exports = {
     name: "ping",
-    description: "Replies with pong",
-    run: async (sock, from, args, msg) => {
-        console.log("⚡ Ping command triggered!");
-        await sock.sendMessage(from, { text: "🏓 pong!SOURAV_MD V 4.10.15" }, { quoted: msg });
+    description: "Check if the bot is alive",
+    run: async (sock, from, args) => {
+        await sock.sendMessage(from, { text: "🏓 Pong! Bot is alive ✅ sourav_md v 4.19.15" });
     }
 };
