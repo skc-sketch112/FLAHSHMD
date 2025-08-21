@@ -1,102 +1,70 @@
+// index.js
 const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion
+    makeWASocket,
+    useMultiFileAuthState,
+    makeCacheableSignalKeyStore,
+    Browsers
 } = require("@whiskeysockets/baileys");
-const fs = require("fs");
-const path = require("path");
-const readline = require("readline");
-const pino = require("pino");
+const P = require("pino");
 
-// 📌 Console input
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-function ask(q) {
-  return new Promise((res) => rl.question(q, res));
-}
+async function connectBot() {
+    const { state, saveCreds } = await useMultiFileAuthState("session");
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
-  const { version } = await fetchLatestBaileysVersion();
-
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    logger: pino({ level: "silent" }),
-    printQRInTerminal: false // ❌ No QR
-  });
-
-  sock.ev.on("creds.update", saveCreds);
-
-  // 🔄 Connection status
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === "open") console.log("✅ Bot connected successfully!");
-    else if (connection === "close") {
-      console.log("⚠️ Connection closed, reconnecting...");
-      startBot();
-    }
-  });
-
-  // 📌 First-time login with phone number
-  if (!state.creds.registered) {
-    const phoneNumber = await ask("📲 Enter WhatsApp number with country code (e.g., +919876543210): ");
-    const code = await sock.requestPairingCode(phoneNumber.trim());
-    console.log(`🔑 Your pairing code is: ${code}`);
-    console.log("👉 Enter this code in WhatsApp → Linked Devices → Link with code.");
-    rl.close();
-  }
-
-  // 📂 Load plugins dynamically
-  const plugins = {};
-  const pluginsDir = path.join(__dirname, "plugins");
-
-  function loadPlugins() {
-    fs.readdirSync(pluginsDir).forEach((file) => {
-      if (file.endsWith(".js")) {
-        const pluginPath = path.join(pluginsDir, file);
-        delete require.cache[require.resolve(pluginPath)];
-        try {
-          const plugin = require(pluginPath);
-          plugins[plugin.name] = plugin;
-          console.log(`✅ Loaded plugin: ${plugin.name}`);
-        } catch (err) {
-          console.error(`❌ Error loading ${file}:`, err);
-        }
-      }
+    const sock = makeWASocket({
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, P({ level: "silent" }))
+        },
+        // 🚫 Disable QR output completely
+        printQRInTerminal: false,
+        logger: P({ level: "silent" }),
+        browser: Browsers.macOS("Safari")
     });
-  }
 
-  loadPlugins();
+    sock.ev.on("connection.update", async (update) => {
+        const { connection } = update;
 
-  // 📌 Command handler
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const m = messages[0];
-    if (!m.message || m.key.fromMe) return;
+        if (connection === "open") {
+            console.log("✅ Bot connected successfully!");
+        }
 
-    const from = m.key.remoteJid;
-    const text =
-      m.message.conversation ||
-      m.message.extendedTextMessage?.text ||
-      "";
+        if (connection === "close") {
+            console.log("❌ Connection closed. Reconnecting...");
+            connectBot();
+        }
 
-    if (!text.startsWith("!")) return;
-    const args = text.trim().split(/\s+/);
-    const command = args.shift().slice(1).toLowerCase();
+        // ✅ Only run pairing code login once
+        if (!state.creds.registered) {
+            let phoneNumber = process.env.NUMBER; // set in ENV: +919876543210
+            if (!phoneNumber) {
+                console.log("⚠️ Please set NUMBER in environment variables.");
+                return;
+            }
+            try {
+                const code = await sock.requestPairingCode(phoneNumber);
+                console.log(`🔑 Pairing code for ${phoneNumber}: ${code}`);
+            } catch (e) {
+                console.error("❌ Failed to get pairing code:", e);
+            }
+        }
+    });
 
-    if (plugins[command]) {
-      try {
-        await plugins[command].run(sock, from, args, m);
-      } catch (e) {
-        console.error(`❌ Error in command ${command}:`, e);
-        await sock.sendMessage(from, { text: "⚠️ Error executing command." });
-      }
-    } else {
-      await sock.sendMessage(from, { text: `❌ Unknown command: ${command}` });
-    }
-  });
+    sock.ev.on("creds.update", saveCreds);
+
+    // Simple command handler
+    sock.ev.on("messages.upsert", async (m) => {
+        const msg = m.messages[0];
+        if (!msg.message || msg.key.fromMe) return;
+
+        const from = msg.key.remoteJid;
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+        if (!text) return;
+
+        if (text === "!ping") {
+            await sock.sendMessage(from, { text: "🏓 Pong!" });
+        }
+    });
 }
 
-startBot();
+connectBot();
