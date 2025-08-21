@@ -32,7 +32,12 @@ async function startBot() {
     fs.readdirSync(pluginsDir).forEach(file => {
         if (file.endsWith(".js")) {
             const cmd = require(path.join(pluginsDir, file))
-            commands.set(cmd.name, cmd)
+            if (cmd && cmd.name && typeof cmd.execute === "function") {
+                commands.set(cmd.name, cmd)
+                console.log(`✅ Loaded plugin: ${cmd.name}`)
+            } else {
+                console.log(`⚠️ Skipping invalid plugin: ${file}`)
+            }
         }
     })
 
@@ -77,4 +82,19 @@ async function startBot() {
         const prefix = "."
         if (!textMessage.startsWith(prefix)) return
 
-        cons
+        const commandName = textMessage.slice(prefix.length).toLowerCase()
+        const command = commands.get(commandName)
+
+        if (command) {
+            try {
+                await command.execute(sock, sender, msg)
+            } catch (err) {
+                console.error(`❌ Error executing ${commandName}:`, err)
+                await sock.sendMessage(sender, { text: "⚠️ Command error!" })
+            }
+        }
+    })
+}
+
+// ✅ FIX: close the function call properly
+startBot()
