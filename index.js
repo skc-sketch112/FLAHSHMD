@@ -43,9 +43,10 @@ async function startSock() {
   // 🔑 Pairing code method (for Render/Heroku)
   if (!sock.authState.creds.registered) {
     const phoneNumber = process.env.PHONE_NUMBER; // Set in Render ENV
-    if (phoneNumber) {
-      const code = await sock.requestPairingCode(phoneNumber);
-      console.log(`🔑 Pairing code for ${phoneNumber}: ${code}`);
+    if (update.pairingCode) {
+    console.log("🔑 Pairing Code:", update.pairingCode);
+    }
+    
     }
   }
 
