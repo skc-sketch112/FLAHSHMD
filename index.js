@@ -1,95 +1,98 @@
 const {
-    makeWASocket,
-    useMultiFileAuthState,
-    fetchLatestBaileysVersion,
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion
 } = require("@whiskeysockets/baileys");
+
 const pino = require("pino");
 const fs = require("fs");
 const path = require("path");
 
-// 🔥 Load all plugins dynamically
-let plugins = {};
+// ==========================
+// 🔥 Plugin Loader
+// ==========================
+const plugins = {};
 function loadPlugins() {
-    plugins = {};
-    const pluginDir = path.join(__dirname, "plugins");
-    if (!fs.existsSync(pluginDir)) fs.mkdirSync(pluginDir);
+  const pluginDir = path.join(__dirname, "plugins");
+  if (!fs.existsSync(pluginDir)) fs.mkdirSync(pluginDir);
 
-    fs.readdirSync(pluginDir).forEach((file) => {
-        if (file.endsWith(".js")) {
-            try {
-                let plugin = require(path.join(pluginDir, file));
-                plugins[plugin.name] = plugin;
-                console.log(`✅ Loaded plugin: ${plugin.name}`);
-            } catch (e) {
-                console.log(`❌ Failed to load plugin ${file}:`, e);
-            }
-        }
-    });
-}
-
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("./session");
-    const { version } = await fetchLatestBaileysVersion();
-
-    const sock = makeWASocket({
-        version,
-        logger: pino({ level: "silent" }),
-        printQRInTerminal: true,
-        auth: state,
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
-    });
-
-    // 🔥 Pairing Code login
-    if (!sock.authState.creds.registered) {
-        const phoneNumber = process.env.NUMBER || "";
-        if (!phoneNumber) {
-            console.log("❌ Please set NUMBER=your_whatsapp_number_with_countrycode in env.");
-            process.exit(1);
-        }
-        let code = await sock.requestPairingCode(phoneNumber);
-        console.log("✅ Your Pairing Code:", code);
-        console.log("📱 Open WhatsApp → Linked Devices → Link with Phone Number → Enter this code.");
+  fs.readdirSync(pluginDir).forEach((file) => {
+    if (file.endsWith(".js")) {
+      const plugin = require(path.join(pluginDir, file));
+      plugins[plugin.name] = plugin;
+      console.log(`✅ Plugin loaded: ${plugin.name}`);
     }
+  });
+}
+loadPlugins();
 
-    sock.ev.on("connection.update", (update) => {
-        const { connection } = update;
-        if (connection === "close") {
-            console.log("❌ Connection closed. Reconnecting...");
-            startBot();
-        } else if (connection === "open") {
-            console.log("✅ Successfully connected to WhatsApp!");
-        }
-    });
+// ==========================
+// 🔥 WhatsApp Connection
+// ==========================
+async function startSock() {
+  const { state, saveCreds } = await useMultiFileAuthState("./session");
+  const { version } = await fetchLatestBaileysVersion();
 
-    sock.ev.on("creds.update", saveCreds);
+  const sock = makeWASocket({
+    logger: pino({ level: "silent" }),
+    auth: state,
+    version,
+    printQRInTerminal: true // QR for local use
+  });
 
-    // 🔥 Message handler with prefix !
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message || msg.key.fromMe) return;
+  // 🔑 Pairing code method (for Render/Heroku)
+  if (!sock.authState.creds.registered) {
+    const phoneNumber = process.env.PHONE_NUMBER; // Set in Render ENV
+    if (phoneNumber) {
+      const code = await sock.requestPairingCode(phoneNumber);
+      console.log(`🔑 Pairing code for ${phoneNumber}: ${code}`);
+    }
+  }
 
-        const from = msg.key.remoteJid;
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            "";
+  // Save session
+  sock.ev.on("creds.update", saveCreds);
 
-        if (!text.startsWith("!")) return; // only commands with "."
-        const [command, ...args] = text.slice(1).trim().split(/\s+/);
+  // Auto reconnect
+  sock.ev.on("connection.update", (update) => {
+    const { connection } = update;
+    if (connection === "close") {
+      console.log("❌ Connection closed. Reconnecting...");
+      startSock();
+    } else if (connection === "open") {
+      console.log("✅ Connected to WhatsApp!");
+    }
+  });
 
-        if (plugins[command]) {
-            try {
-                await plugins[command].run(sock, msg, args);
-            } catch (e) {
-                console.error(`❌ Error in plugin ${command}:`, e);
-                await sock.sendMessage(from, { text: "⚠️ Error while executing command." });
-            }
-        } else {
-            await sock.sendMessage(from, { text: "❓ Unknown command." });
-        }
-    });
+  // ==========================
+  // 🔥 Message Handler
+  // ==========================
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    const from = msg.key.remoteJid;
+    const type = Object.keys(msg.message)[0];
+    const body =
+      type === "conversation"
+        ? msg.message.conversation
+        : type === "extendedTextMessage"
+        ? msg.message.extendedTextMessage.text
+        : "";
+
+    if (!body.startsWith("!")) return; // Command prefix
+    const [cmd, ...args] = body.slice(1).split(" ");
+
+    if (plugins[cmd]) {
+      try {
+        await plugins[cmd].run(sock, msg, args);
+      } catch (err) {
+        console.error(`❌ Error in ${cmd}:`, err);
+        await sock.sendMessage(from, { text: "⚠️ Error running command" });
+      }
+    } else {
+      await sock.sendMessage(from, { text: "❌ Unknown command" });
+    }
+  });
 }
 
-// load all plugins before start
-loadPlugins();
-startBot();
+startSock();
