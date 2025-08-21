@@ -1,97 +1,52 @@
-// index.js
 const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion
 } = require("@whiskeysockets/baileys");
-const pino = require("pino");
-const fs = require("fs");
+const express = require("express");
+const qrcode = require("qrcode");
 
-// 🔹 Extract plain text from any WhatsApp message
-function extractMessageText(msg) {
-    try {
-        const m = msg.message;
-        if (!m) return "";
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-        if (m.conversation) return m.conversation;
-        if (m.extendedTextMessage) return m.extendedTextMessage.text;
-        if (m.imageMessage?.caption) return m.imageMessage.caption;
-        if (m.videoMessage?.caption) return m.videoMessage.caption;
-        if (m.buttonsResponseMessage) return m.buttonsResponseMessage.selectedButtonId;
-        if (m.listResponseMessage) return m.listResponseMessage.singleSelectReply.selectedRowId;
-        if (m.ephemeralMessage) return extractMessageText(m.ephemeralMessage.message);
-        if (m.viewOnceMessageV2) return extractMessageText(m.viewOnceMessageV2.message);
+(async () => {
+  const { state, saveCreds } = await useMultiFileAuthState("auth");
+  const { version } = await fetchLatestBaileysVersion();
 
-    } catch (e) {
-        console.error("❌ extractMessageText error:", e);
+  const sock = makeWASocket({
+    version,
+    printQRInTerminal: false, // disable console QR
+    auth: state
+  });
+
+  // Serve QR code as image link
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, qr } = update;
+
+    if (qr) {
+      const qrImageUrl = await qrcode.toDataURL(qr);
+      app.get("/qr", (req, res) => {
+        res.send(`
+          <h2>📱 Scan this QR with WhatsApp</h2>
+          <img src="${qrImageUrl}" />
+        `);
+      });
+      console.log(`➡️ Open http://localhost:${PORT}/qr to scan QR`);
     }
-    return "";
-}
 
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("session");
+    if (connection === "open") {
+      console.log("✅ WhatsApp bot connected!");
+    }
+  });
 
-    const sock = makeWASocket({
-        logger: pino({ level: "silent" }),
-        auth: state,
-        printQRInTerminal: true
-    });
+  sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on("creds.update", saveCreds);
+  // Health check route
+  app.get("/", (req, res) => {
+    res.send("✅ WhatsApp bot is running");
+  });
 
-    sock.ev.on("connection.update", async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-            console.log("\n📱 Scan QR from console OR open this link:\n", qrLink, "\n");
-        }
-
-        if (connection === "close") {
-            const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
-            if (reason === DisconnectReason.loggedOut) {
-                console.log("❌ Logged out. Delete 'session' folder and restart.");
-                fs.rmSync("session", { recursive: true, force: true });
-                startBot();
-            } else {
-                console.log("🔄 Reconnecting...");
-                startBot();
-            }
-        }
-
-        if (connection === "open") {
-            console.log("✅ Bot connected to WhatsApp!");
-        }
-    });
-
-    // 🔹 Message Handler
-    const prefix = ".";
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-
-        const from = msg.key.remoteJid;
-        const text = extractMessageText(msg);
-
-        if (!text) return;
-        if (!text.startsWith(prefix)) return;
-
-        const args = text.slice(prefix.length).trim().split(/ +/);
-        const cmd = args.shift().toLowerCase();
-
-        console.log("⚡ Command:", cmd);
-
-        // Basic Commands
-        if (cmd === "ping") {
-            await sock.sendMessage(from, { text: "🏓 Pong! Bot is alive." });
-        } else if (cmd === "menu") {
-            await sock.sendMessage(from, { text: "✨ *Bot Menu*\n\n• .ping - Check bot status\n• .menu - Show commands" });
-        } else {
-            await sock.sendMessage(from, { text: `❌ Unknown command: ${cmd}` });
-        }
-    });
-
-    return sock;
-}
-
-startBot();
+  app.listen(PORT, () => {
+    console.log(`🌍 Server running on http://localhost:${PORT}`);
+  });
+})();
