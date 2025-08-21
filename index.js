@@ -1,52 +1,78 @@
+// index.js
 const {
-    makeWASocket,
+    default: makeWASocket,
     useMultiFileAuthState,
     DisconnectReason
 } = require("@whiskeysockets/baileys");
+const qrcode = require("qrcode-terminal");
+const pino = require("pino");
 const fs = require("fs");
 const path = require("path");
 
-const prefix = "!"; // change your command prefix here
+const prefix = "."; // command prefix
+let plugins = new Map();
 
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("auth_info");
-
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false // QR is disabled, using pairing code instead
-    });
-
-    // 🔑 Pairing code login
-    if (!sock.authState.creds.registered) {
-        try {
-            const code = await sock.requestPairingCode("91XXXXXXXXXX"); // your number here
-            console.log(`🔗 Pairing Code: ${code}`);
-            console.log("⚡ Enter this code in WhatsApp > Linked Devices > Link with phone number.");
-        } catch (err) {
-            console.error("❌ Pairing code error:", err);
-        }
-    }
-
-    // 🔄 Save session
-    sock.ev.on("creds.update", saveCreds);
-
-    // 📦 Load plugins dynamically
-    const plugins = new Map();
+async function loadPlugins(sock) {
     const pluginsDir = path.join(__dirname, "plugins");
 
-    if (fs.existsSync(pluginsDir)) {
-        fs.readdirSync(pluginsDir).forEach(file => {
-            if (file.endsWith(".js")) {
-                const plugin = require(path.join(pluginsDir, file));
-                if (plugin.name && typeof plugin.run === "function") {
-                    plugins.set(plugin.name, plugin);
-                    console.log(`✅ Loaded plugin: ${plugin.name}`);
-                }
-            }
-        });
+    if (!fs.existsSync(pluginsDir)) {
+        fs.mkdirSync(pluginsDir);
     }
 
-    // 💬 Handle messages
+    plugins.clear();
+    fs.readdirSync(pluginsDir).forEach(file => {
+        if (file.endsWith(".js")) {
+            const plugin = require(path.join(pluginsDir, file));
+            if (plugin.name && typeof plugin.run === "function") {
+                plugins.set(plugin.name, plugin);
+                console.log(`✅ Loaded plugin: ${plugin.name}`);
+            }
+        }
+    });
+}
+
+async function startBot() {
+    const { state, saveCreds } = await useMultiFileAuthState("session");
+
+    const sock = makeWASocket({
+        logger: pino({ level: "silent" }),
+        auth: state,
+        printQRInTerminal: true, // prints QR in console
+    });
+
+    // load all plugins
+    await loadPlugins(sock);
+
+    sock.ev.on("creds.update", saveCreds);
+
+    // Connection & QR
+    sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+            // Show QR as link
+            const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+            console.log("📱 Scan QR from console OR open this link to scan:\n", qrLink);
+        }
+
+        if (connection === "close") {
+            const reason = new Error(lastDisconnect?.error)?.output?.statusCode;
+            if (reason === DisconnectReason.loggedOut) {
+                console.log("❌ Session logged out. Delete 'session' folder and restart.");
+                fs.rmSync("session", { recursive: true, force: true });
+                startBot();
+            } else {
+                console.log("🔄 Reconnecting...");
+                startBot();
+            }
+        }
+
+        if (connection === "open") {
+            console.log("✅ Bot connected to WhatsApp!");
+        }
+    });
+
+    // Message handler
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -70,23 +96,12 @@ async function startBot() {
                 await plugins.get(command).run(sock, from, args, msg);
             } catch (err) {
                 console.error(`❌ Error in ${command}:`, err);
-                await sock.sendMessage(from, { text: "⚠️ Command error." });
+                await sock.sendMessage(from, { text: "⚠️ Error while running command." });
             }
         }
     });
 
-    // 🔌 Connection handling
-    sock.ev.on("connection.update", (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === "close") {
-            const shouldReconnect =
-                lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log("Connection closed. Reconnecting:", shouldReconnect);
-            if (shouldReconnect) startBot();
-        } else if (connection === "open") {
-            console.log("✅ Connected to WhatsApp");
-        }
-    });
+    return sock;
 }
 
 startBot();
