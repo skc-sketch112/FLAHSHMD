@@ -1,18 +1,20 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
+  "description": "WhatsApp Bot using Baileys with plugin loader & command handler",
   "main": "index.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
-  "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.7",
-    "express": "^4.19.2",
-    "pino": "^9.5.0",
-    "qrcode": "^1.5.4"
-  },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "node-fetch": "^2.7.0",
+    "google-tts-api": "^2.0.2",
+    "open": "^9.1.0"
   }
 }
