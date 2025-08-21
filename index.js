@@ -20,13 +20,27 @@ async function startBot() {
         auth: state,
     })
 
-    // 🔗 QR Code Link
+    // 🔌 Plugin Loader
+    const commands = new Map()
+    const pluginsDir = path.join(__dirname, "plugins")
+
+    if (!fs.existsSync(pluginsDir)) {
+        fs.mkdirSync(pluginsDir)
+        console.log("📂 'plugins' folder created. Add your plugin files inside it!")
+    }
+
+    fs.readdirSync(pluginsDir).forEach(file => {
+        if (file.endsWith(".js")) {
+            const cmd = require(path.join(pluginsDir, file))
+            commands.set(cmd.name, cmd)
+        }
+    })
+
+    // Connection handling
     sock.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
         if (qr) {
             console.log("📲 Scan this QR to connect:")
-            console.log(
-                `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`
-            )
+            console.log(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`)
         }
 
         if (connection === "close") {
@@ -41,21 +55,14 @@ async function startBot() {
 
     sock.ev.on("creds.update", saveCreds)
 
-    // 📦 Load Plugins
-    const commands = new Map()
-    fs.readdirSync("./commands").forEach(file => {
-        if (file.endsWith(".js")) {
-            const cmd = require(`./commands/${file}`)
-            commands.set(cmd.name, cmd)
-        }
-    })
-
-    // 📩 Message Handler
+    // 📩 Listen for messages
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0]
-        if (!msg) return
+        if (!msg || msg.key.fromMe) return
 
         const sender = msg.key.remoteJid
+
+        // Extract text message
         let textMessage =
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
@@ -66,20 +73,8 @@ async function startBot() {
         textMessage = textMessage.trim()
         console.log(`💬 Message from ${sender}: ${textMessage}`)
 
+        // Prefix system
         const prefix = "."
         if (!textMessage.startsWith(prefix)) return
 
-        const commandName = textMessage.slice(prefix.length).toLowerCase()
-
-        if (commands.has(commandName)) {
-            try {
-                await commands.get(commandName).execute(sock, sender, msg)
-            } catch (e) {
-                console.error("❌ Command error:", e)
-                await sock.sendMessage(sender, { text: "⚠️ Command error" })
-            }
-        }
-    })
-}
-
-startBot()
+        cons
